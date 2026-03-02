@@ -1,0 +1,11 @@
+Here's a plain-language summary of the four fixes:
+1. Merge/Split detection was looking in the wrong place
+The original code tried to find merge/split information by looking at the same form record as the original lesion. But when a lesion merges or splits, CDB creates a new, separate record (e.g., T1/T2 for a merge, T1.1/T1.2 for a split). The fix looks at those new records instead, checking TULIR_TUORRES_O_TUMERGE and TULIR_TUORRES_O_TUSPLIT to trace back which original lesion was involved.
+2. Merge/Split cutoff timing was wrong
+The original code allowed evaluations to still be flagged as missing at the merge/split date. The fix excludes the original lesion from the expected date onward — once a lesion merges or splits, no further evaluations are expected for the original.
+3. New lesions (like N5) were being excluded
+The original code had a filter that blocked all lesion IDs starting with "N" (except "NT"). This incorrectly excluded New lesions like N5. The fix removes that filter and instead adds a guard that only flags New lesions for timepoints after they were first identified — so they don't get flagged for weeks before they existed.
+4. DSEDRA discontinuation date was pulling from the wrong field
+The original code used the form's event header date (@HDR.Event.Date) instead of the actual discontinuation date field on the form (DSEDRA_DTCIT). The fix uses the correct field per the SDS, so subjects who discontinued are properly excluded.
+5. CQL-specific workaround
+During testing, we discovered that CQL doesn't reliably pass computed subquery columns from an inner SELECT to the outer WHERE clause. All filtering logic was restructured to use direct NOT EXISTS / EXISTS checks in the outer WHERE, which CQL handles correctly.
