@@ -1,0 +1,102 @@
+-- ==========================================
+-- DIAGNOSTIC QUERY - Run this FIRST to debug
+-- Shows intermediate values for problem subjects only
+-- ==========================================
+
+SELECT
+  exp.Site AS `Site`,
+  exp.Participant AS `Participant`,
+  exp.LesionRefNum AS `Lesion Ref Num`,
+  exp.LesionID AS `Lesion ID`,
+  exp.RandDate AS `Rand Date`,
+  DATE_FORMAT(exp.ExpectedDate, '%e%b%Y') AS `Expected Date`,
+  exp.DSEDRA_DisconDate AS `DSEDRA DisconDate`,
+  exp.LesionEndDate AS `LesionEndDate`,
+  exp.LesionFirstEvalDate AS `LesionFirstEval`
+FROM
+(
+  SELECT
+    s.Site AS Site,
+    s.Participant AS Participant,
+    s.RandDate AS RandDate,
+    s.DSEDRA_DisconDate AS DSEDRA_DisconDate,
+    l.LesionRefNum AS LesionRefNum,
+    l.LesionID AS LesionID,
+    tp.TpWeek AS TpWeek,
+    ADDDATE(s.RandDate, tp.OffsetDays) AS ExpectedDate,
+
+    -- LesionEndDate: find eval date on records that SPLIT or MERGED this lesion
+    (
+      SELECT MIN(CAST(m.TULIR_TUDAT_DRV AS DATE))
+      FROM EDC.TULIR m
+      WHERE m.@HDR.Site.Number  = s.Site
+        AND m.@HDR.Subject.Name = s.Participant
+        AND m.TULIR_TUDAT_DRV IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM EDC.TULIR f
+          WHERE f.@HDR.Site.Number  = s.Site
+            AND f.@HDR.Subject.Name = s.Participant
+            AND f.@Form.SeqNbr      = m.@Form.SeqNbr
+            AND (
+              f.TULIR_TUORRES_O_TUSPLIT = l.LesionID
+              OR f.TULIR_TUORRES_O_TUMERGE = l.LesionID
+            )
+        )
+    ) AS LesionEndDate,
+
+    -- First eval date for this lesion
+    (
+      SELECT MIN(CAST(fe.TULIR_TUDAT_DRV AS DATE))
+      FROM EDC.TULIR fe
+      WHERE fe.@HDR.Site.Number  = s.Site
+        AND fe.@HDR.Subject.Name = s.Participant
+        AND fe.@Form.SeqNbr      = l.LesionRefNum
+        AND fe.TULIR_TUDAT_DRV IS NOT NULL
+    ) AS LesionFirstEvalDate
+
+  FROM
+  (
+    SELECT
+      r.@HDR.Site.Number  AS Site,
+      r.@HDR.Subject.Name AS Participant,
+      MAX(CAST(r.DSRND_DSSTDAT AS DATE)) AS RandDate,
+      (
+        SELECT MAX(CAST(d.DSEDRA_DTCIT AS DATE))
+        FROM EDC.DSEDRA d
+        WHERE d.@HDR.Site.Number  = r.@HDR.Site.Number
+          AND d.@HDR.Subject.Name = r.@HDR.Subject.Name
+          AND d.@Form.Status IN ('submitted__v','in_progress__v')
+      ) AS DSEDRA_DisconDate
+    FROM EDC.DSRND r
+    WHERE r.DSRND_DSSTDAT IS NOT NULL
+    GROUP BY
+      r.@HDR.Site.Number,
+      r.@HDR.Subject.Name
+  ) s,
+  (
+    SELECT DISTINCT
+      @HDR.Site.Number   AS Site,
+      @HDR.Subject.Name  AS Participant,
+      @Form.SeqNbr       AS LesionRefNum,
+      TULIR_TULNKID_DRV  AS LesionID
+    FROM EDC.TULIR
+    WHERE TULIR_TULNKID_DRV IS NOT NULL
+      AND TULIR_TULNKID_DRV NOT LIKE '%.%'
+      AND TULIR_TULNKID_DRV NOT LIKE '%/%'
+  ) l,
+  (
+    SELECT DISTINCT  8 AS TpWeek,  56 AS OffsetDays FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 16, 112 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 24, 168 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 32, 224 FROM EDC.DSRND
+  ) tp
+
+  WHERE s.Site = l.Site
+    AND s.Participant = l.Participant
+) exp
+
+WHERE exp.Site = '0027'
+  AND exp.Participant IN ('00270097','00270098','00270099','00270100')
+
+ORDER BY exp.Participant, exp.LesionRefNum, exp.ExpectedDate

@@ -1,0 +1,74 @@
+-- ==========================================
+-- TEST 1: Does DSEDRA_DTCIT field exist and return data?
+-- If this returns empty, try TEST 1B with @HDR.Event.Date
+-- ==========================================
+
+SELECT
+  d.@HDR.Site.Number AS `Site`,
+  d.@HDR.Subject.Name AS `Participant`,
+  d.@Form.Status AS `Form Status`,
+  d.@HDR.Event.Date AS `Event Date`,
+  d.DSEDRA_DTCIT AS `DSEDRA_DTCIT`
+FROM EDC.DSEDRA d
+WHERE d.@HDR.Site.Number = '0027'
+ORDER BY d.@HDR.Subject.Name
+
+
+-- ==========================================
+-- TEST 2: Does TULIR_TUORRES_O_TUSPLIT contain data?
+-- Check what the split reference field actually holds
+-- ==========================================
+
+SELECT
+  @HDR.Site.Number AS `Site`,
+  @HDR.Subject.Name AS `Participant`,
+  @Form.SeqNbr AS `Form SeqNbr`,
+  TULIR_TULNKID_DRV AS `Lesion ID`,
+  TULIR_TUORRES_TUMERGE_TUSPLIT AS `Merge/Split Flag`,
+  TULIR_TUORRES_O_TUSPLIT AS `Split From (O)`,
+  TULIR_TUORRES_TUSPLIT AS `Split From (non-O)`
+FROM EDC.TULIR
+WHERE @HDR.Site.Number = '0027'
+  AND @HDR.Subject.Name = '00270097'
+  AND TULIR_TULNKID_DRV IS NOT NULL
+ORDER BY @Form.SeqNbr
+
+
+-- ==========================================
+-- TEST 3: Does TULIR_TUORRES_O_TUMERGE contain data?
+-- Check what the merge reference field actually holds
+-- ==========================================
+
+SELECT
+  @HDR.Site.Number AS `Site`,
+  @HDR.Subject.Name AS `Participant`,
+  @Form.SeqNbr AS `Form SeqNbr`,
+  TULIR_TULNKID_DRV AS `Lesion ID`,
+  TULIR_TUORRES_TUMERGE_TUSPLIT AS `Merge/Split Flag`,
+  TULIR_TUORRES_O_TUMERGE AS `Merged With (O)`,
+  TULIR_TUORRES_TUMERGE AS `Merged With (non-O)`
+FROM EDC.TULIR
+WHERE @HDR.Site.Number = '0027'
+  AND @HDR.Subject.Name = '00270098'
+  AND TULIR_TULNKID_DRV IS NOT NULL
+ORDER BY @Form.SeqNbr
+
+
+-- ==========================================
+-- TEST 4: Verify N5 is in lesion list
+-- (if N5 doesn't appear, the filter is wrong)
+-- ==========================================
+
+SELECT DISTINCT
+  @HDR.Site.Number AS `Site`,
+  @HDR.Subject.Name AS `Participant`,
+  @Form.SeqNbr AS `Form SeqNbr`,
+  TULIR_TULNKID_DRV AS `Lesion ID`,
+  TULIR_TUMIDENT AS `Lesion Identification`
+FROM EDC.TULIR
+WHERE @HDR.Site.Number = '0027'
+  AND @HDR.Subject.Name = '00270099'
+  AND TULIR_TULNKID_DRV IS NOT NULL
+  AND TULIR_TULNKID_DRV NOT LIKE '%.%'
+  AND TULIR_TULNKID_DRV NOT LIKE '%/%'
+ORDER BY @Form.SeqNbr
