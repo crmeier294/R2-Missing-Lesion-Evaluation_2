@@ -2,3 +2,11 @@
 00270098: Output is not expected for Lesions T1 and T2, since these lesions merged on 16Dec2025 to T1/T2. Therefore, following T1 and T2 evaluations are not expected.
 00270099: Output is not expected for Lesions T1 and T2, since these lesions merged on 16Dec2025 to T1/T2. Therefore, following T1 and T2 evaluations are not expected. Output is missing for lesion #5 N5
 00270100: Output is not expected for next lesion evaluations since Date of Discontinuation on DSEDRA is completed on 7Nov2025
+
+
+Expected subjects are present.
+00270093: NT1 - 14Oct2025–28Oct2025 and 9Dec2025–23Dec2025
+00270097: T1 + T2 - 9Dec2025–23Dec2025
+00270099: T1 + T3 - 9Dec2025–23Dec2025
+00270101: NT1 - 9Dec2025–23Dec2025
+00270101: NT2 - 19Aug2025–2Sep2025 and 9Dec2025–23Dec2025
