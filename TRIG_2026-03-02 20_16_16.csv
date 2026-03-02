@@ -1,0 +1,2 @@
+Study.Name,Site.Number,Subject.Name,Subject.Status,Subject.ID,EventGroup.Name,Event.Name,Event.Date,Event.Status,Event.VisitMethod,ItemGroup.Name,TRIG_O_SCARM,TRIG_O_SCARM_DECODE
+5684-015_TST1,0027,00270100,enrolled__v,OPP00000005F160,eg_RAND,ev_RAND,2025-07-01,in_progress__v,,ig_TRIG,0012,ETPC (Breast Cancer)
