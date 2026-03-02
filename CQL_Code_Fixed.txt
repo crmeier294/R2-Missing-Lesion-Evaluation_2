@@ -1,0 +1,172 @@
+SELECT
+exp.Site AS `Site`,
+exp.Participant AS `Participant`,
+exp.DSEDRA_DisconDate AS `DSEDRA Date of Discontinuation`,
+exp.LesionRefNum AS `Lesion Ref Num`,
+exp.LesionID AS `Lesion ID`,
+exp.RandDate as `Randomization/Allocation Date`,
+  CONCAT(
+    CONCAT(
+      DATE_FORMAT(SUBDATE(exp.ExpectedDate, 7), '%e%b%Y'),
+      ' - '
+    ),
+    DATE_FORMAT(ADDDATE(exp.ExpectedDate, 7), '%e%b%Y')
+  ) AS `Expected Evaluation Timeframe`
+FROM
+(
+  SELECT
+    s.Site AS Site,
+    s.Participant AS Participant,
+    s.RandDate AS RandDate,
+    s.DSEDRA_DisconDate AS DSEDRA_DisconDate,
+    l.LesionRefNum AS LesionRefNum,
+    l.LesionID AS LesionID,
+    tp.TpWeek AS TpWeek,
+    ADDDATE(s.RandDate, tp.OffsetDays) AS ExpectedDate,
+
+    -- SPLIT end date: find the evaluation date on records that split FROM this lesion
+    -- The split child records reference the parent lesion ID via TULIR_TUORRES_O_TUSPLIT
+    (
+      SELECT MIN(CAST(sd.TULIR_TUDAT_DRV AS DATE))
+      FROM EDC.TULIR si, EDC.TULIR sd
+      WHERE si.@HDR.Site.Number  = s.Site
+        AND si.@HDR.Subject.Name = s.Participant
+        AND si.TULIR_TUORRES_TUMERGE_TUSPLIT = 'SPLIT'
+        AND si.TULIR_TUORRES_O_TUSPLIT = l.LesionID
+        AND sd.@HDR.Site.Number  = s.Site
+        AND sd.@HDR.Subject.Name = s.Participant
+        AND sd.@Form.SeqNbr      = si.@Form.SeqNbr
+        AND sd.TULIR_TUDAT_DRV IS NOT NULL
+    ) AS SplitEndDate,
+
+    -- MERGE end date: find the evaluation date on records that merged this lesion
+    -- The merged record lists component lesions via TULIR_TUORRES_O_TUMERGE in ig_TULIR2_2
+    (
+      SELECT MIN(CAST(md.TULIR_TUDAT_DRV AS DATE))
+      FROM EDC.TULIR mi, EDC.TULIR mr, EDC.TULIR md
+      WHERE mi.@HDR.Site.Number  = s.Site
+        AND mi.@HDR.Subject.Name = s.Participant
+        AND mi.TULIR_TUORRES_TUMERGE_TUSPLIT = 'MERGED'
+        AND mr.@HDR.Site.Number  = s.Site
+        AND mr.@HDR.Subject.Name = s.Participant
+        AND mr.@Form.SeqNbr      = mi.@Form.SeqNbr
+        AND mr.TULIR_TUORRES_O_TUMERGE = l.LesionID
+        AND md.@HDR.Site.Number  = s.Site
+        AND md.@HDR.Subject.Name = s.Participant
+        AND md.@Form.SeqNbr      = mi.@Form.SeqNbr
+        AND md.TULIR_TUDAT_DRV IS NOT NULL
+    ) AS MergeEndDate,
+
+    -- First evaluation date for this lesion (used to exclude timepoints before lesion existed)
+    (
+      SELECT MIN(CAST(fe.TULIR_TUDAT_DRV AS DATE))
+      FROM EDC.TULIR fe
+      WHERE fe.@HDR.Site.Number  = s.Site
+        AND fe.@HDR.Subject.Name = s.Participant
+        AND fe.@Form.SeqNbr      = l.LesionRefNum
+        AND fe.TULIR_TUDAT_DRV IS NOT NULL
+    ) AS LesionFirstEvalDate
+
+  FROM
+  (
+    -- Randomization Date + optional DSEDRA discontinuation date
+    SELECT
+      r.@HDR.Site.Number  AS Site,
+      r.@HDR.Subject.Name AS Participant,
+      MAX(CAST(r.DSRND_DSSTDAT AS DATE)) AS RandDate,
+
+      -- DSEDRA discontinuation date = DSEDRA_DTCIT (Date of Discontinuation from the form)
+      (
+        SELECT MAX(CAST(d.DSEDRA_DTCIT AS DATE))
+        FROM EDC.DSEDRA d
+        WHERE d.@HDR.Site.Number  = r.@HDR.Site.Number
+          AND d.@HDR.Subject.Name = r.@HDR.Subject.Name
+          AND d.@Form.Status IN ('submitted__v','in_progress__v')
+      ) AS DSEDRA_DisconDate
+    FROM EDC.DSRND r
+    WHERE r.DSRND_DSSTDAT IS NOT NULL
+    GROUP BY
+      r.@HDR.Site.Number,
+      r.@HDR.Subject.Name
+  ) s,
+  (
+    -- All original lesions (exclude split children with '.' and merged IDs with '/')
+    SELECT DISTINCT
+      @HDR.Site.Number   AS Site,
+      @HDR.Subject.Name  AS Participant,
+      @Form.SeqNbr       AS LesionRefNum,
+      TULIR_TULNKID_DRV  AS LesionID
+    FROM EDC.TULIR
+    WHERE TULIR_TULNKID_DRV IS NOT NULL
+      AND TULIR_TULNKID_DRV NOT LIKE '%.%'
+      AND TULIR_TULNKID_DRV NOT LIKE '%/%'
+  ) l,
+
+  (
+    -- timepoints (weeks -> days)
+    SELECT DISTINCT  8 AS TpWeek,  56 AS OffsetDays FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 16, 112 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 24, 168 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 32, 224 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 40, 280 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 48, 336 FROM EDC.DSRND
+
+    UNION ALL SELECT DISTINCT 60, 420 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 72, 504 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 84, 588 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 96, 672 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 108, 756 FROM EDC.DSRND
+    UNION ALL SELECT DISTINCT 120, 840 FROM EDC.DSRND
+  ) tp
+
+  WHERE s.Site = l.Site
+    AND s.Participant = l.Participant
+) exp
+
+WHERE
+  -- Only timepoints whose +/-7 window has ended
+  DATEDIFF(CURDATE(), ADDDATE(exp.ExpectedDate, 7)) >= 0
+
+  -- Stop after DSEDRA discontinuation (if present): ExpectedDate <= DSEDRA_DisconDate 
+  AND (exp.DSEDRA_DisconDate IS NULL OR DATEDIFF(exp.DSEDRA_DisconDate, exp.ExpectedDate) >= 0)
+
+  -- Stop after lesion split date: ExpectedDate <= SplitEndDate
+  AND (exp.SplitEndDate IS NULL OR DATEDIFF(exp.SplitEndDate, exp.ExpectedDate) >= 0)
+
+  -- Stop after lesion merge date: ExpectedDate <= MergeEndDate
+  AND (exp.MergeEndDate IS NULL OR DATEDIFF(exp.MergeEndDate, exp.ExpectedDate) >= 0)
+
+  -- Only check timepoints at or after the lesion first evaluation date
+  -- (prevents flagging timepoints before a NEW lesion was first identified)
+  AND (exp.LesionFirstEvalDate IS NULL OR DATEDIFF(exp.ExpectedDate, exp.LesionFirstEvalDate) >= 0)
+
+  -- Missing if NO eval within +/-7 days of ExpectedDate
+  AND NOT EXISTS
+  (
+    SELECT 1
+    FROM EDC.TULIR e7
+    WHERE e7.@HDR.Site.Number  = exp.Site
+      AND e7.@HDR.Subject.Name = exp.Participant
+      AND e7.@Form.SeqNbr      = exp.LesionRefNum
+      AND e7.TULIR_TUDAT_DRV IS NOT NULL
+      AND DATEDIFF(CAST(e7.TULIR_TUDAT_DRV AS DATE), exp.ExpectedDate) BETWEEN -7 AND 7
+  )
+
+  -- scan within +/-7 of expected AND eval within +/-14 of that scan
+  AND NOT EXISTS
+  (
+    SELECT 1
+    FROM EDC.PROSCN sc, EDC.TULIR e14
+    WHERE sc.@HDR.Site.Number  = exp.Site
+      AND sc.@HDR.Subject.Name = exp.Participant
+      AND sc.PROSCN_PRDAT IS NOT NULL
+      AND DATEDIFF(CAST(sc.PROSCN_PRDAT AS DATE), exp.ExpectedDate) BETWEEN -7 AND 7
+
+      AND e14.@HDR.Site.Number  = exp.Site
+      AND e14.@HDR.Subject.Name = exp.Participant
+      AND e14.@Form.SeqNbr      = exp.LesionRefNum
+      AND e14.TULIR_TUDAT_DRV IS NOT NULL
+      AND DATEDIFF(CAST(e14.TULIR_TUDAT_DRV AS DATE), CAST(sc.PROSCN_PRDAT AS DATE)) BETWEEN -14 AND 14
+  )
+
+ORDER BY exp.Site, exp.Participant, exp.LesionRefNum, exp.ExpectedDate
