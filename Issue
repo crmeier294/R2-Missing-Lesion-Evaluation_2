@@ -1,0 +1,4 @@
+00270097: Output is not expected for Lesion T1, since this lesion split on 16Dec2025 to T1.1 and T1.2. Therefore, following T1 evaluations are not expected.
+00270098: Output is not expected for Lesions T1 and T2, since these lesions merged on 16Dec2025 to T1/T2. Therefore, following T1 and T2 evaluations are not expected.
+00270099: Output is not expected for Lesions T1 and T2, since these lesions merged on 16Dec2025 to T1/T2. Therefore, following T1 and T2 evaluations are not expected. Output is missing for lesion #5 N5
+00270100: Output is not expected for next lesion evaluations since Date of Discontinuation on DSEDRA is completed on 7Nov2025
